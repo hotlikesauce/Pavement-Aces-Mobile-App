@@ -698,7 +698,7 @@
             latlngs.push(ll);
             const s = (f.properties.Status ?? '').toLowerCase();
             const fill = s === 'complete' ? '#2e9e4f' : s === 'planned' ? '#2970c4' : '#888';
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="${fill}" stroke="white" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="${fill}" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
             return L.marker(ll, {
               icon: L.divIcon({ html: svg, className: 'pentagon-marker', iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13], tooltipAnchor: [0, -13] })
             });
