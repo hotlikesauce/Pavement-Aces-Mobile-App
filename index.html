@@ -146,12 +146,32 @@
 
     /* Photo */
     .photo-slot { position: relative; background: #111; }
-    .photo-slot img { width: 100%; max-height: 190px; object-fit: cover; display: block; cursor: zoom-in; }
+    .photo-slot > img { width: 100%; max-height: 190px; object-fit: cover; display: block; cursor: zoom-in; }
     .popup-photo-placeholder {
       width: 100%; height: 72px; background: #1a1a1a;
       display: flex; align-items: center; justify-content: center;
       font-size: 11px; color: #444; letter-spacing: 0.04em;
     }
+
+    /* Carousel */
+    .photo-carousel { position: relative; overflow: hidden; background: #111; }
+    .carousel-track { display: flex; transition: transform 0.22s ease; will-change: transform; }
+    .carousel-track img { min-width: 100%; max-height: 190px; object-fit: cover; display: block; cursor: zoom-in; flex-shrink: 0; }
+    .carousel-counter {
+      position: absolute; bottom: 7px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.58); color: #fff; font-size: 11px; font-weight: 700;
+      padding: 2px 9px; border-radius: 10px; pointer-events: none;
+    }
+    .carousel-btn {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      background: rgba(0,0,0,0.42); color: #fff; border: none; cursor: pointer;
+      width: 28px; height: 44px; font-size: 22px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-tap-highlight-color: transparent; border-radius: 4px;
+      padding: 0;
+    }
+    .carousel-prev { left: 3px; }
+    .carousel-next { right: 3px; }
 
     /* Header band */
     .popup-header {
@@ -362,28 +382,75 @@
       });
     }
 
+    function panForPopup(el) {
+      const popupEl = el.closest('.leaflet-popup');
+      if (!popupEl) return;
+      const rect    = popupEl.getBoundingClientRect();
+      const mapRect = map.getContainer().getBoundingClientRect();
+      const slack   = rect.top - mapRect.top - 16;
+      if (slack < 0) map.panBy([0, slack], { animate: true });
+    }
+
     async function loadPhotoIntoSlot(layerUrl, oid, slot) {
       try {
-        const data = await jsonp(`${layerUrl}/${oid}/attachments?f=json`);
-        if (!data.attachmentInfos?.length) {
+        const data  = await jsonp(`${layerUrl}/${oid}/attachments?f=json`);
+        const infos = data.attachmentInfos ?? [];
+        if (!infos.length) {
           slot.innerHTML = `<div class="popup-photo-placeholder">No photo on file</div>`; return;
         }
-        const src = `${layerUrl}/${oid}/attachments/${data.attachmentInfos[0].id}`;
-        const img = document.createElement('img');
-        img.src = src; img.alt = 'Patch photo';
-        img.addEventListener('click', () => openLightbox(src));
-        img.addEventListener('load', () => {
-          const popupEl = slot.closest('.leaflet-popup');
-          if (!popupEl) return;
-          const rect    = popupEl.getBoundingClientRect();
-          const mapRect = map.getContainer().getBoundingClientRect();
-          const slack   = rect.top - mapRect.top - 16;
-          if (slack < 0) map.panBy([0, slack], { animate: true });
-        });
-        slot.innerHTML = ''; slot.appendChild(img);
+        const srcs = infos.map(a => `${layerUrl}/${oid}/attachments/${a.id}`);
+
+        if (srcs.length === 1) {
+          const img = document.createElement('img');
+          img.src = srcs[0]; img.alt = 'Patch photo';
+          img.addEventListener('click', () => openLightbox(srcs[0]));
+          img.addEventListener('load', () => panForPopup(slot));
+          slot.innerHTML = ''; slot.appendChild(img);
+        } else {
+          buildCarousel(slot, srcs);
+        }
       } catch {
         slot.innerHTML = `<div class="popup-photo-placeholder">Photo unavailable</div>`;
       }
+    }
+
+    function buildCarousel(slot, srcs) {
+      let current = 0;
+      const loaded = new Array(srcs.length).fill(false);
+
+      const wrap    = document.createElement('div'); wrap.className = 'photo-carousel';
+      const track   = document.createElement('div'); track.className = 'carousel-track';
+      const counter = document.createElement('div'); counter.className = 'carousel-counter';
+      const prev    = document.createElement('button'); prev.className = 'carousel-btn carousel-prev'; prev.innerHTML = '&#8249;';
+      const next    = document.createElement('button'); next.className = 'carousel-btn carousel-next'; next.innerHTML = '&#8250;';
+
+      const imgs = srcs.map((src, i) => {
+        const img = document.createElement('img');
+        img.alt = `Photo ${i + 1}`;
+        if (i === 0) { img.src = src; loaded[0] = true; img.addEventListener('load', () => panForPopup(slot)); }
+        img.addEventListener('click', () => openLightbox(srcs[current]));
+        track.appendChild(img);
+        return img;
+      });
+
+      function goTo(idx) {
+        current = (idx + srcs.length) % srcs.length;
+        track.style.transform = `translateX(-${current * 100}%)`;
+        counter.textContent = `${current + 1} / ${srcs.length}`;
+        if (!loaded[current]) { imgs[current].src = srcs[current]; loaded[current] = true; }
+      }
+
+      prev.addEventListener('click', e => { e.stopPropagation(); goTo(current - 1); });
+      next.addEventListener('click', e => { e.stopPropagation(); goTo(current + 1); });
+
+      // Touch swipe
+      let tx = 0;
+      track.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+      track.addEventListener('touchend',   e => { const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) goTo(current + (dx < 0 ? 1 : -1)); });
+
+      counter.textContent = `1 / ${srcs.length}`;
+      wrap.appendChild(track); wrap.appendChild(counter); wrap.appendChild(prev); wrap.appendChild(next);
+      slot.innerHTML = ''; slot.appendChild(wrap);
     }
 
     // ─── POPUP ─────────────────────────────────────────────────────────────────
