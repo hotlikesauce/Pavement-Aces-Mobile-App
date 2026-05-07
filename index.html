@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Citrus Heights – Point Patching</title>
+  <link rel="icon" type="image/png" href="Paces.png?v=3"/>
+  <link rel="shortcut icon" href="Paces.png?v=3"/>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #111; }
+    #app { display: flex; flex-direction: column; height: 100dvh; }
+
+    /* ── Header ── */
+    #header {
+      flex-shrink: 0; position: relative;
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 10px;
+      background: #1a1a1a;
+      border-bottom: 2px solid #c0392b;
+      z-index: 2000;
+    }
+    #logo { height: 42px; width: 42px; object-fit: contain; border-radius: 6px; flex-shrink: 0; }
+    #header-title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+    #header-title .org  { font-size: 9px; color: #888; letter-spacing: 0.08em; text-transform: uppercase; }
+    #header-title .name { font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Search ── */
+    #search-wrap {
+      position: relative;
+      display: flex; align-items: center;
+      background: #2a2a2a; border: 1.5px solid #3a3a3a;
+      border-radius: 20px; padding: 5px 10px; gap: 6px;
+      flex-shrink: 0; transition: border-color 0.15s;
+    }
+    #search-wrap:focus-within { border-color: #c0392b; }
+    #search-wrap svg { color: #666; flex-shrink: 0; }
+    #search-input {
+      background: transparent; border: none; outline: none;
+      color: #fff; font-size: 13px; width: 120px;
+    }
+    #search-input::placeholder { color: #555; }
+    #search-clear { color: #555; cursor: pointer; font-size: 14px; display: none; -webkit-tap-highlight-color: transparent; }
+    #search-clear.visible { display: block; color: #999; }
+
+    /* ── Suggestions ── */
+    #suggestions {
+      position: fixed;
+      background: #1c1c1c; border: 1px solid #333;
+      border-radius: 10px; overflow: hidden;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.7);
+      z-index: 9000; display: none;
+      max-height: 260px; overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .sug-group-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: #555; padding: 8px 12px 3px; font-weight: 700;
+    }
+    .sug-item {
+      padding: 10px 14px; font-size: 13px; color: #ccc;
+      cursor: pointer; display: flex; align-items: baseline; gap: 0;
+      -webkit-tap-highlight-color: transparent; border-bottom: 1px solid #252525;
+    }
+    .sug-item:last-child { border-bottom: none; }
+    .sug-item:hover, .sug-item.highlighted { background: #2a2a2a; color: #fff; }
+    .sug-patch { font-weight: 700; color: #fff; margin-right: 6px; font-size: 13px; }
+    .sug-street { color: #888; font-size: 12px; }
+    .sug-year-val { font-weight: 600; color: #fff; }
+
+    /* ── Map ── */
+    #map-wrap { position: relative; flex: 1; min-height: 0; }
+    #map { width: 100%; height: 100%; }
+
+    #badge {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(20,20,20,0.88); color: #ccc;
+      padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+      z-index: 1000; pointer-events: none; display: none; white-space: nowrap;
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+    #no-results {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      background: rgba(20,20,20,0.9); color: #aaa;
+      padding: 10px 20px; border-radius: 20px; font-size: 13px;
+      z-index: 1000; display: none; white-space: nowrap; border: 1px solid #333;
+    }
+    #legend {
+      position: absolute; bottom: 14px; left: 10px;
+      background: rgba(20,20,20,0.9); border-radius: 8px;
+      padding: 8px 10px; font-size: 11px; color: #aaa;
+      z-index: 1000; line-height: 1.9; border: 1px solid rgba(255,255,255,0.06);
+    }
+    .leg-dot {
+      display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+      margin-right: 5px; vertical-align: middle; border: 1.5px solid rgba(255,255,255,0.2);
+    }
+
+    /* ── Year bar ── */
+    #year-bar {
+      flex-shrink: 0; display: none;
+      align-items: center; gap: 6px; padding: 7px 10px;
+      background: #161616; border-top: 1px solid #262626;
+      overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    #year-bar::-webkit-scrollbar { display: none; }
+    #year-bar .bar-label { font-size: 11px; color: #555; flex-shrink: 0; }
+    .yr-btn {
+      flex-shrink: 0; padding: 4px 13px; border-radius: 16px;
+      border: 1.5px solid #333; background: #222; color: #888;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: all 0.15s; -webkit-tap-highlight-color: transparent;
+    }
+    .yr-btn.active { background: #c0392b; border-color: #c0392b; color: #fff; }
+
+    /* ── Loading ── */
+    #loading {
+      position: fixed; inset: 0; background: rgba(12,12,12,0.97);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; z-index: 9999;
+    }
+    #loading img { width: 80px; height: 80px; object-fit: contain; border-radius: 12px; }
+    #loading-text { font-size: 13px; color: #777; }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #222; border-top-color: #c0392b;
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Popup ── */
+    .leaflet-popup-content { padding: 0 !important; margin: 0 !important; }
+    .leaflet-popup-content-wrapper { border-radius: 12px !important; overflow: hidden; padding: 0 !important; box-shadow: 0 8px 32px rgba(0,0,0,0.35) !important; }
+    .leaflet-popup-tip-container { display: none; }
+    .leaflet-popup-close-button { color: #fff !important; font-size: 18px !important; right: 10px !important; top: 8px !important; z-index: 10; }
+
+    .popup-wrap { width: 285px; max-height: 70dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+    /* Photo */
+    .photo-slot { position: relative; background: #111; }
+    .photo-slot img { width: 100%; max-height: 190px; object-fit: cover; display: block; cursor: zoom-in; }
+    .popup-photo-placeholder {
+      width: 100%; height: 72px; background: #1a1a1a;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; color: #444; letter-spacing: 0.04em;
+    }
+
+    /* Header band */
+    .popup-header {
+      background: #1a1a1a;
+      padding: 10px 14px 9px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .popup-header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .popup-patch-num { font-size: 17px; font-weight: 800; color: #fff; letter-spacing: -0.02em; }
+    .status-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: 10px; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
+    }
+    .status-badge.complete { background: rgba(46,158,79,0.2); color: #4cd87a; border: 1px solid rgba(46,158,79,0.4); }
+    .status-badge.planned  { background: rgba(41,112,196,0.2); color: #5ba8ff; border: 1px solid rgba(41,112,196,0.4); }
+    .status-badge.other    { background: rgba(136,136,136,0.2); color: #aaa; border: 1px solid rgba(136,136,136,0.3); }
+    .popup-street { font-size: 12px; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Body */
+    .popup-body { padding: 10px 14px 14px; background: #fff; }
+
+    .popup-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0; margin-bottom: 6px;
+    }
+    .grid-cell {
+      padding: 6px 8px 6px 0; border-bottom: 1px solid #f0f0f0;
+    }
+    .grid-cell:nth-child(odd) { border-right: 1px solid #f0f0f0; padding-right: 10px; }
+    .grid-cell:nth-child(even) { padding-left: 10px; }
+    .grid-label { font-size: 10px; color: #bbb; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1px; }
+    .grid-value { font-size: 13px; font-weight: 600; color: #1a1a1a; }
+
+    .popup-notes {
+      margin-top: 6px; padding: 8px 10px;
+      background: #f8f8f8; border-radius: 6px;
+      font-size: 12px; color: #444; line-height: 1.5;
+      border-left: 3px solid #ddd;
+    }
+    .popup-notes .notes-label { font-size: 10px; color: #bbb; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+
+    .popup-timestamps {
+      margin-top: 8px; padding-top: 8px;
+      border-top: 1px solid #f0f0f0;
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: #ccc;
+    }
+    .ts-item { display: flex; flex-direction: column; gap: 1px; }
+    .ts-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #ddd; }
+    .ts-value { color: #aaa; }
+
+    /* Leaflet controls */
+    .leaflet-control-layers { border-radius: 8px !important; background: rgba(22,22,22,0.93) !important; border: 1px solid #333 !important; }
+    .leaflet-control-layers label span { color: #ccc !important; }
+
+    /* ── Patch number labels (shown at zoom >= 17) ── */
+    .leaflet-tooltip.patch-label {
+      background: transparent; border: none; box-shadow: none;
+      font-size: 10px; font-weight: 800; padding: 0 2px;
+      white-space: nowrap; pointer-events: none !important;
+      letter-spacing: 0.02em;
+    }
+    .leaflet-tooltip.patch-label::before { display: none; }
+    .leaflet-tooltip.patch-label.lbl-complete {
+      color: #1e8a40;
+      text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff;
+    }
+    .leaflet-tooltip.patch-label.lbl-planned {
+      color: #1a5fa8;
+      text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff;
+    }
+    .leaflet-tooltip.patch-label.lbl-other {
+      color: #555;
+      text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+    }
+    /* Hidden until zoom threshold */
+    #map:not(.show-labels) .leaflet-tooltip.patch-label { display: none !important; }
+
+    /* ── Lightbox ── */
+    #lightbox {
+      display: none; position: fixed; inset: 0; z-index: 99999;
+      background: rgba(0,0,0,0.96); align-items: center; justify-content: center;
+    }
+    #lightbox.open { display: flex; }
+    #lightbox img { max-width: 96vw; max-height: 90dvh; border-radius: 6px; object-fit: contain; }
+    #lightbox-close {
+      position: absolute; top: 14px; right: 16px; color: #fff; font-size: 20px;
+      cursor: pointer; width: 40px; height: 40px;
+      background: rgba(255,255,255,0.1); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="lightbox">
+    <div id="lightbox-close">&#x2715;</div>
+    <img id="lightbox-img" src="" alt="Patch photo"/>
+  </div>
+
+  <div id="loading">
+    <img src="Paces.png" alt="PA" onerror="this.style.display='none'"/>
+    <div class="spinner"></div>
+    <div id="loading-text">Loading patch data…</div>
+  </div>
+
+  <div id="suggestions"></div>
+
+  <div id="app">
+    <div id="header">
+      <img id="logo" src="Paces.png" alt="PA" onerror="this.style.display='none'"/>
+      <div id="header-title">
+        <span class="org">Pavement Aces</span>
+        <span class="name">Citrus Heights Point Patching</span>
+      </div>
+      <div id="search-wrap">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="search-input" type="text" inputmode="search" placeholder="Search…" autocomplete="off" spellcheck="false"/>
+        <span id="search-clear">&#x2715;</span>
+      </div>
+    </div>
+
+    <div id="map-wrap">
+      <div id="map"></div>
+      <div id="badge"></div>
+      <div id="no-results">No patches match</div>
+      <div id="legend">
+        <div><span class="leg-dot" style="background:#2e9e4f"></span>Complete</div>
+        <div><span class="leg-dot" style="background:#2970c4"></span>Planned</div>
+        <div><span class="leg-dot" style="background:#888"></span>Other</div>
+      </div>
+    </div>
+
+    <div id="year-bar"><span class="bar-label">Year</span></div>
+  </div>
+
+  <script>
+    const ITEM_ID   = '9848099c418940129b90ae7678455a6d';
+    const AGOL_REST = 'https://calpavements.maps.arcgis.com/sharing/rest';
+    const LAYER_IDX = 0;
+    const WHERE     = "Municipality = 'Citrus Heights'";
+
+    const SKIP = new Set([
+      'objectid','globalid','shape','shape__area','shape__length',
+      'creator','editor','municipality',
+      'creator_1','editdate_1','editor_1','creationdate_1',
+      'latitude','longitude',
+      // handled explicitly
+      'patch_num','planned_year','street_name','streetname',
+      'material','patch_area','length_d','width_d',
+      'status','notes','comments','creationdate','editdate',
+    ]);
+    const DATE_FIELDS = new Set(['creationdate','editdate','date_collected','inspection_date']);
+
+    // ─── MAP ───────────────────────────────────────────────────────────────────
+    const map = L.map('map', { center: [38.690, -121.285], zoom: 13 });
+    const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
+    const hybrid = L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        { attribution: 'Imagery © Esri', maxZoom: 20 }),
+      L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        { maxZoom: 20 }),
+    ]);
+    L.control.layers({ 'Street': streets, 'Hybrid / Imagery': hybrid }, null, { position: 'topright' }).addTo(map);
+
+    // ─── LIGHTBOX ──────────────────────────────────────────────────────────────
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+    lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLightbox(); hideSuggestions(); } });
+    function openLightbox(src) { lightboxImg.src = src; lightbox.classList.add('open'); }
+    function closeLightbox()   { lightbox.classList.remove('open'); lightboxImg.src = ''; }
+
+    // ─── DATE ──────────────────────────────────────────────────────────────────
+    function fmtEpoch(ms) {
+      if (!ms) return '—';
+      const d = new Date(ms);
+      return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+
+    // ─── FETCH ─────────────────────────────────────────────────────────────────
+    async function getServiceUrl() {
+      const r = await fetch(`${AGOL_REST}/content/items/${ITEM_ID}?f=json`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error.message);
+      if (!d.url)  throw new Error('No service URL on item');
+      return d.url.replace(/\/$/, '');
+    }
+
+    async function fetchGeoJSON(layerUrl) {
+      const p = new URLSearchParams({ where: WHERE, outFields: '*', returnGeometry: 'true', f: 'geojson' });
+      const r = await fetch(`${layerUrl}/query?${p}`);
+      if (!r.ok) throw new Error(`Query ${r.status}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error.message);
+      return d;
+    }
+
+    function jsonp(url) {
+      return new Promise((resolve, reject) => {
+        const cb = '_agol_' + Math.random().toString(36).slice(2);
+        window[cb] = data => { delete window[cb]; script.remove(); resolve(data); };
+        const script = document.createElement('script');
+        script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+        script.onerror = () => { delete window[cb]; script.remove(); reject(new Error('JSONP')); };
+        document.head.appendChild(script);
+      });
+    }
+
+    async function loadPhotoIntoSlot(layerUrl, oid, slot) {
+      try {
+        const data = await jsonp(`${layerUrl}/${oid}/attachments?f=json`);
+        if (!data.attachmentInfos?.length) {
+          slot.innerHTML = `<div class="popup-photo-placeholder">No photo on file</div>`; return;
+        }
+        const src = `${layerUrl}/${oid}/attachments/${data.attachmentInfos[0].id}`;
+        const img = document.createElement('img');
+        img.src = src; img.alt = 'Patch photo';
+        img.addEventListener('click', () => openLightbox(src));
+        slot.innerHTML = ''; slot.appendChild(img);
+      } catch {
+        slot.innerHTML = `<div class="popup-photo-placeholder">Photo unavailable</div>`;
+      }
+    }
+
+    // ─── POPUP ─────────────────────────────────────────────────────────────────
+    function statusBadge(status) {
+      const s = (status ?? '').toLowerCase();
+      const cls = s === 'complete' ? 'complete' : s === 'planned' ? 'planned' : 'other';
+      return `<span class="status-badge ${cls}">${status || 'Unknown'}</span>`;
+    }
+
+    function popupHtml(p) {
+      const patchNum   = p.Patch_Num != null ? `#${p.Patch_Num}` : `OID ${p.OBJECTID ?? '?'}`;
+      const street     = p.Street_Name || p.StreetName || '';
+      const material   = p.Material || '—';
+      const area       = p.Patch_Area != null ? Number(p.Patch_Area).toFixed(0) + ' sqft' : '—';
+      const length     = p.Length_D != null ? Number(p.Length_D).toFixed(1) : '—';
+      const width      = p.Width_D  != null ? Number(p.Width_D).toFixed(1) : '—';
+      const year       = p.Planned_Year ?? '—';
+      const notes      = p.Notes || p.Comments || '';
+      const collected  = p.CreationDate ? fmtEpoch(p.CreationDate) : '—';
+      const updated    = p.EditDate ? fmtEpoch(p.EditDate) : '—';
+
+      // Extra fields not explicitly handled above
+      const extraRows = Object.entries(p)
+        .filter(([k, v]) => !SKIP.has(k.toLowerCase()) && v != null && v !== '')
+        .map(([k, v]) => {
+          const disp = DATE_FIELDS.has(k.toLowerCase()) && typeof v === 'number' ? fmtEpoch(v) : v;
+          return `<div class="grid-cell"><div class="grid-label">${k}</div><div class="grid-value">${disp}</div></div>`;
+        }).join('');
+
+      return `<div class="popup-wrap">
+        <div class="photo-slot"><div class="popup-photo-placeholder">Loading photo…</div></div>
+        <div class="popup-header">
+          <div class="popup-header-row">
+            <span class="popup-patch-num">${patchNum}</span>
+            ${statusBadge(p.Status)}
+          </div>
+          ${street ? `<div class="popup-street">&#x1F4CD; ${street}</div>` : ''}
+        </div>
+        <div class="popup-body">
+          <div class="popup-grid">
+            <div class="grid-cell"><div class="grid-label">Material</div><div class="grid-value">${material}</div></div>
+            <div class="grid-cell"><div class="grid-label">Year</div><div class="grid-value">${year}</div></div>
+            <div class="grid-cell"><div class="grid-label">Area</div><div class="grid-value">${area}</div></div>
+            <div class="grid-cell" style="border-bottom:none"></div>
+            <div class="grid-cell"><div class="grid-label">Length (Ft)</div><div class="grid-value">${length}</div></div>
+            <div class="grid-cell"><div class="grid-label">Width (Ft)</div><div class="grid-value">${width}</div></div>
+            ${extraRows}
+          </div>
+          ${notes ? `<div class="popup-notes"><div class="notes-label">Notes</div>${notes}</div>` : ''}
+          <div class="popup-timestamps">
+            <div class="ts-item"><span class="ts-label">Collected</span><span class="ts-value">${collected}</span></div>
+            <div class="ts-item" style="text-align:right"><span class="ts-label">Updated</span><span class="ts-value">${updated}</span></div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // ─── FILTER + ZOOM ─────────────────────────────────────────────────────────
+    let allLayers   = [];
+    let activeYear  = 'all';
+    let searchQuery = '';
+
+    function applyFilters() {
+      const sq = searchQuery.toLowerCase();
+      let visible = 0;
+      for (const { layer, year, patchNum, streetName } of allLayers) {
+        const matchYear   = activeYear === 'all' || String(year) === activeYear;
+        const matchSearch = !sq
+          || String(patchNum ?? '').toLowerCase().includes(sq)
+          || String(streetName ?? '').toLowerCase().includes(sq)
+          || String(year ?? '').includes(sq);
+        const show = matchYear && matchSearch;
+        const tt = layer.getTooltip()?.getElement();
+        if (show) {
+          layer.setStyle({ opacity: 1, fillOpacity: 0.88 });
+          if (layer.getElement()) layer.getElement().style.pointerEvents = '';
+          if (tt) tt.style.visibility = '';
+          visible++;
+        } else {
+          layer.setStyle({ opacity: 0, fillOpacity: 0 });
+          if (layer.getElement()) layer.getElement().style.pointerEvents = 'none';
+          if (tt) tt.style.visibility = 'hidden';
+          if (layer.isPopupOpen()) map.closePopup();
+        }
+      }
+      showBadge(`${visible} patch${visible !== 1 ? 'es' : ''} shown`);
+      document.getElementById('no-results').style.display =
+        (visible === 0 && (activeYear !== 'all' || sq)) ? 'block' : 'none';
+    }
+
+    function zoomToVisible(thenOpenIfSingle) {
+      const visible = allLayers.filter(({ layer }) => {
+        const el = layer.getElement();
+        return !el || el.style.pointerEvents !== 'none';
+      });
+      if (!visible.length) return;
+
+      if (visible.length === 1) {
+        map.setView(visible[0].layer.getLatLng(), 17, { animate: true });
+        if (thenOpenIfSingle) {
+          setTimeout(() => visible[0].layer.openPopup(), 350);
+        }
+      } else {
+        map.fitBounds(L.latLngBounds(visible.map(v => v.layer.getLatLng())),
+          { padding: [50, 50], maxZoom: 17 });
+      }
+    }
+
+    // ─── SUGGESTIONS ───────────────────────────────────────────────────────────
+    let sugData = { patches: [], years: [] };
+    let highlightIdx = -1;
+    const sugBox = document.getElementById('suggestions');
+
+    function buildSuggestionData() {
+      // Each item: { patchNum, streetName }
+      sugData.patches = [...new Map(
+        allLayers.filter(l => l.patchNum != null)
+          .map(l => [l.patchNum, { patchNum: l.patchNum, streetName: l.streetName || '' }])
+      ).values()].sort((a, b) => a.patchNum - b.patchNum);
+
+      sugData.years = [...new Set(allLayers.map(l => l.year).filter(v => v != null))].sort();
+    }
+
+    function showSuggestions(query) {
+      const q = query.toLowerCase().trim();
+      if (!q) { hideSuggestions(); return; }
+
+      const patchHits = sugData.patches.filter(({ patchNum, streetName }) =>
+        String(patchNum).includes(q) || streetName.toLowerCase().includes(q)
+      ).slice(0, 10);
+
+      const yearHits = sugData.years.filter(y => String(y).includes(q));
+
+      if (!patchHits.length && !yearHits.length) { hideSuggestions(); return; }
+
+      let html = '';
+      if (patchHits.length) {
+        html += `<div class="sug-group-label">Patches</div>`;
+        html += patchHits.map(({ patchNum, streetName }) =>
+          `<div class="sug-item" data-value="${patchNum}" data-type="patch">
+            <span class="sug-patch">#${patchNum}</span>
+            ${streetName ? `<span class="sug-street">${streetName}</span>` : ''}
+          </div>`
+        ).join('');
+      }
+      if (yearHits.length) {
+        if (patchHits.length) html += `<div style="height:1px;background:#252525;margin:2px 0"></div>`;
+        html += `<div class="sug-group-label">Year</div>`;
+        html += yearHits.map(y =>
+          `<div class="sug-item" data-value="${y}" data-type="year"><span class="sug-year-val">${y}</span></div>`
+        ).join('');
+      }
+
+      sugBox.innerHTML = html;
+      highlightIdx = -1;
+
+      const rect = document.getElementById('search-wrap').getBoundingClientRect();
+      sugBox.style.top   = (rect.bottom + 4) + 'px';
+      sugBox.style.right = (window.innerWidth - rect.right) + 'px';
+      sugBox.style.left  = 'auto';
+      sugBox.style.width = Math.max(rect.width, 230) + 'px';
+      sugBox.style.display = 'block';
+    }
+
+    function hideSuggestions() { sugBox.style.display = 'none'; highlightIdx = -1; }
+
+    sugBox.addEventListener('click', e => {
+      const item = e.target.closest('.sug-item');
+      if (!item) return;
+      selectSuggestion(item.dataset.value, item.dataset.type);
+    });
+
+    function selectSuggestion(value, type) {
+      hideSuggestions();
+      const searchInput = document.getElementById('search-input');
+      searchInput.value = String(value);
+      searchQuery = String(value).toLowerCase();
+      document.getElementById('search-clear').classList.add('visible');
+      applyFilters();
+      zoomToVisible(type === 'patch'); // auto-open popup only for exact patch picks
+      searchInput.blur();
+    }
+
+    function navigateSuggestions(dir) {
+      const items = sugBox.querySelectorAll('.sug-item');
+      if (!items.length) return;
+      items[highlightIdx]?.classList.remove('highlighted');
+      highlightIdx = (highlightIdx + dir + items.length) % items.length;
+      items[highlightIdx].classList.add('highlighted');
+      items[highlightIdx].scrollIntoView({ block: 'nearest' });
+    }
+
+    // ─── YEAR BAR ──────────────────────────────────────────────────────────────
+    function buildYearBar(years) {
+      const bar = document.getElementById('year-bar');
+      bar.style.display = 'flex';
+      const allBtn = document.createElement('button');
+      allBtn.className = 'yr-btn active'; allBtn.textContent = 'All'; allBtn.dataset.year = 'all';
+      bar.appendChild(allBtn);
+      years.sort().forEach(yr => {
+        const btn = document.createElement('button');
+        btn.className = 'yr-btn'; btn.textContent = yr; btn.dataset.year = String(yr);
+        bar.appendChild(btn);
+      });
+      bar.addEventListener('click', e => {
+        const btn = e.target.closest('.yr-btn');
+        if (!btn) return;
+        bar.querySelectorAll('.yr-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeYear = btn.dataset.year;
+        applyFilters();
+      });
+    }
+
+    // ─── SEARCH INPUT ──────────────────────────────────────────────────────────
+    const searchInput = document.getElementById('search-input');
+    const searchClear = document.getElementById('search-clear');
+
+    searchInput.addEventListener('input', () => {
+      searchQuery = searchInput.value.trim().toLowerCase();
+      searchClear.classList.toggle('visible', searchQuery.length > 0);
+      applyFilters();
+      showSuggestions(searchInput.value.trim());
+    });
+
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); navigateSuggestions(1); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); navigateSuggestions(-1); return; }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const hi = sugBox.querySelector('.sug-item.highlighted');
+        if (hi) { selectSuggestion(hi.dataset.value, hi.dataset.type); }
+        else { hideSuggestions(); applyFilters(); zoomToVisible(false); searchInput.blur(); }
+      }
+      if (e.key === 'Escape') { hideSuggestions(); searchInput.blur(); }
+    });
+
+    searchInput.addEventListener('focus', () => {
+      if (searchInput.value.trim()) showSuggestions(searchInput.value.trim());
+    });
+
+    searchClear.addEventListener('click', () => {
+      searchInput.value = ''; searchQuery = '';
+      searchClear.classList.remove('visible');
+      hideSuggestions(); applyFilters();
+    });
+
+    document.addEventListener('click', e => {
+      if (!document.getElementById('search-wrap').contains(e.target) && !sugBox.contains(e.target))
+        hideSuggestions();
+    });
+
+    // ─── DISTRICT BOUNDARIES ───────────────────────────────────────────────────
+    const DISTRICT_ITEM = '0e23a958ad5b4a7d9a34383996fb4788';
+
+    // Convert Esri JSON polygon features → GeoJSON FeatureCollection
+    function esriToGeoJSON(esriFeatures) {
+      return {
+        type: 'FeatureCollection',
+        features: esriFeatures.filter(f => f.geometry?.rings).map(f => ({
+          type: 'Feature',
+          geometry: { type: 'Polygon', coordinates: f.geometry.rings },
+          properties: f.attributes || {},
+        })),
+      };
+    }
+
+    async function loadDistricts() {
+      try {
+        // Step 1: resolve service URL via JSONP
+        const item = await jsonp(`${AGOL_REST}/content/items/${DISTRICT_ITEM}?f=json`);
+        if (item.error) {
+          console.warn('Districts: item error —', item.error.message,
+            '(share the item publicly in AGOL: Content → item → Share → Everyone)');
+          return;
+        }
+        if (!item.url) { console.warn('Districts: item has no service URL'); return; }
+        const svcUrl = item.url.replace(/\/$/, '');
+        console.log('Districts service URL:', svcUrl);
+
+        // Step 2: query geometry via JSONP (f=json works; f=geojson does not with JSONP)
+        const queryUrl = `${svcUrl}/0/query?where=1%3D1&outFields=OBJECTID&returnGeometry=true&f=json`;
+        const data = await jsonp(queryUrl);
+        if (data.error) {
+          console.warn('Districts: query error —', data.error.message,
+            '(make sure the Feature Service itself is also shared publicly)');
+          return;
+        }
+        if (!data.features?.length) { console.warn('Districts: no features returned'); return; }
+
+        L.geoJSON(esriToGeoJSON(data.features), {
+          interactive: false,
+          style: {
+            color:       '#7ab3d4',
+            weight:      2,
+            opacity:     0.6,
+            fillColor:   '#aad4f0',
+            fillOpacity: 0.07,
+            dashArray:   '6 4',
+          },
+        }).addTo(map);
+        console.log(`Districts: loaded ${data.features.length} polygons`);
+      } catch (err) {
+        console.warn('Districts: failed —', err.message);
+      }
+    }
+
+    // ─── MAIN ──────────────────────────────────────────────────────────────────
+    async function main() {
+      try {
+        setStatus('Resolving service URL…');
+        // Load districts in background (non-blocking) before patches render
+        loadDistricts();
+        const serviceUrl = await getServiceUrl();
+        const layerUrl   = `${serviceUrl}/${LAYER_IDX}`;
+
+        setStatus('Loading features…');
+        const geojson  = await fetchGeoJSON(layerUrl);
+        const features = geojson.features ?? [];
+        if (!features.length) { setStatus('No features found.'); return; }
+
+        const years = new Set();
+        const latlngs = [];
+
+        L.geoJSON(geojson, {
+          pointToLayer: (f, ll) => {
+            latlngs.push(ll);
+            const s = (f.properties.Status ?? '').toLowerCase();
+            const fillColor = s === 'complete' ? '#2e9e4f' : s === 'planned' ? '#2970c4' : '#888';
+            return L.circleMarker(ll, { radius: 9, fillColor, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.88 });
+          },
+          onEachFeature: (f, layer) => {
+            const oid        = f.properties.OBJECTID ?? f.properties.objectid;
+            const year       = f.properties.Planned_Year;
+            const patchNum   = f.properties.Patch_Num;
+            // Case-insensitive scan for any street-like field
+            const streetKey = Object.keys(f.properties).find(k =>
+              ['street_name','streetname','street','street_address'].includes(k.toLowerCase())
+            );
+            const streetName = streetKey ? (f.properties[streetKey] || null) : null;
+            if (year != null) years.add(year);
+            allLayers.push({ layer, year, patchNum, streetName });
+
+            // Patch number label — visible only at high zoom via CSS
+            if (patchNum != null) {
+              const s = (f.properties.Status ?? '').toLowerCase();
+              const lblClass = s === 'complete' ? 'lbl-complete' : s === 'planned' ? 'lbl-planned' : 'lbl-other';
+              layer.bindTooltip(String(patchNum), {
+                permanent: true, direction: 'top', offset: [0, -9],
+                className: `patch-label ${lblClass}`,
+              });
+            }
+
+            layer.bindPopup(popupHtml(f.properties), { maxWidth: 300, minWidth: 285 });
+            layer.on('popupopen', () => {
+              const slot = layer.getPopup().getElement()?.querySelector('.photo-slot');
+              if (slot && !slot.dataset.loaded) {
+                slot.dataset.loaded = '1';
+                loadPhotoIntoSlot(layerUrl, oid, slot);
+              }
+            });
+          },
+        }).addTo(map);
+
+        if (latlngs.length) map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16 });
+        buildYearBar([...years]);
+        buildSuggestionData();
+        showBadge(`${features.length} patches loaded`);
+        document.getElementById('loading').style.display = 'none';
+
+        // Patch number labels appear at zoom 17+ (≈4 clicks in from default city view)
+        const LABEL_ZOOM = 17;
+        function updateLabels() {
+          document.getElementById('map').classList.toggle('show-labels', map.getZoom() >= LABEL_ZOOM);
+        }
+        map.on('zoomend', updateLabels);
+        updateLabels();
+
+      } catch (err) {
+        setStatus('⚠ ' + err.message);
+        console.error(err);
+      }
+    }
+
+    function setStatus(msg) { document.getElementById('loading-text').textContent = msg; }
+    function showBadge(msg) { const b = document.getElementById('badge'); b.textContent = msg; b.style.display = 'block'; }
+
+    main();
+  </script>
+</body>
+</html>
