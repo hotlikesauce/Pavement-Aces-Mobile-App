@@ -545,14 +545,14 @@
       if (!visible.length) return;
 
       if (visible.length === 1) {
-        const ll = visible[0].layer.getLatLng();
-        // Shift center north so marker sits ~70% down — full popup + 190px photo fits above
-        const H = map.getContainer().clientHeight;
-        const offsetPx = Math.max(130, H * 0.28);
-        const shifted = map.unproject(map.project(ll, 17).subtract([0, offsetPx]), 17);
-        map.setView(shifted, 17, { animate: true });
         if (thenOpenIfSingle) {
-          setTimeout(() => visible[0].layer.openPopup(), 420);
+          zoomAndOpen(visible[0].layer);
+        } else {
+          const ll = visible[0].layer.getLatLng();
+          const H  = map.getContainer().clientHeight;
+          const offsetPx = Math.max(130, H * 0.28);
+          const shifted  = map.unproject(map.project(ll, 17).subtract([0, offsetPx]), 17);
+          map.setView(shifted, 17, { animate: true });
         }
       } else {
         map.fitBounds(L.latLngBounds(visible.map(v => v.layer.getLatLng())),
@@ -624,15 +624,36 @@
       selectSuggestion(item.dataset.value, item.dataset.type);
     });
 
+    function zoomAndOpen(layer) {
+      const ll = layer.getLatLng();
+      const H  = map.getContainer().clientHeight;
+      const offsetPx = Math.max(130, H * 0.28);
+      const shifted  = map.unproject(map.project(ll, 17).subtract([0, offsetPx]), 17);
+      map.setView(shifted, 17, { animate: true });
+      setTimeout(() => layer.openPopup(), 420);
+    }
+
     function selectSuggestion(value, type) {
       hideSuggestions();
       const searchInput = document.getElementById('search-input');
-      searchInput.value = String(value);
-      searchQuery = String(value).toLowerCase();
-      document.getElementById('search-clear').classList.add('visible');
-      applyFilters();
-      zoomToVisible(type === 'patch'); // auto-open popup only for exact patch picks
-      searchInput.blur();
+
+      if (type === 'patch') {
+        // Exact navigate — don't filter, just find and open the one patch
+        const target = allLayers.find(l => String(l.patchNum) === String(value));
+        if (target) {
+          searchInput.value = '';
+          document.getElementById('search-clear').classList.remove('visible');
+          searchInput.blur();
+          zoomAndOpen(target.layer);
+        }
+      } else {
+        searchInput.value = String(value);
+        searchQuery = String(value).toLowerCase();
+        document.getElementById('search-clear').classList.add('visible');
+        applyFilters();
+        zoomToVisible(false);
+        searchInput.blur();
+      }
     }
 
     function navigateSuggestions(dir) {
