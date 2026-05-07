@@ -114,6 +114,9 @@
       transition: all 0.15s; -webkit-tap-highlight-color: transparent;
     }
     .yr-btn.active { background: #c0392b; border-color: #c0392b; color: #fff; }
+    .yr-btn.status-btn.active.status-complete { background: #2e9e4f; border-color: #2e9e4f; color: #fff; }
+    .yr-btn.status-btn.active.status-planned  { background: #2970c4; border-color: #2970c4; color: #fff; }
+    .bar-divider { width: 1px; height: 18px; background: #2e2e2e; flex-shrink: 0; align-self: center; margin: 0 2px; }
 
     /* ── Loading ── */
     #loading {
@@ -428,20 +431,25 @@
     }
 
     // ─── FILTER + ZOOM ─────────────────────────────────────────────────────────
-    let allLayers   = [];
-    let activeYear  = 'all';
-    let searchQuery = '';
+    let allLayers    = [];
+    let activeYear   = 'all';
+    let searchQuery  = '';
+    let showComplete = true;
+    let showPlanned  = true;
 
     function applyFilters() {
       const sq = searchQuery.toLowerCase();
       let visible = 0;
-      for (const { layer, year, patchNum, streetName } of allLayers) {
+      for (const { layer, year, patchNum, streetName, status } of allLayers) {
         const matchYear   = activeYear === 'all' || String(year) === activeYear;
         const matchSearch = !sq
           || String(patchNum ?? '').toLowerCase().includes(sq)
           || String(streetName ?? '').toLowerCase().includes(sq)
           || String(year ?? '').includes(sq);
-        const show = matchYear && matchSearch;
+        const matchStatus = (status === 'complete' && showComplete)
+                         || (status === 'planned'  && showPlanned)
+                         || (status !== 'complete' && status !== 'planned');
+        const show = matchYear && matchSearch && matchStatus;
         const el = layer.getElement();
         const tt = layer.getTooltip()?.getElement();
         if (show) {
@@ -565,6 +573,8 @@
     function buildYearBar(years) {
       const bar = document.getElementById('year-bar');
       bar.style.display = 'flex';
+
+      // Year buttons
       const allBtn = document.createElement('button');
       allBtn.className = 'yr-btn active'; allBtn.textContent = 'All'; allBtn.dataset.year = 'all';
       bar.appendChild(allBtn);
@@ -573,12 +583,35 @@
         btn.className = 'yr-btn'; btn.textContent = yr; btn.dataset.year = String(yr);
         bar.appendChild(btn);
       });
+
+      // Divider + Status label
+      const divider = document.createElement('span'); divider.className = 'bar-divider'; bar.appendChild(divider);
+      const sLabel  = document.createElement('span');  sLabel.className = 'bar-label'; sLabel.textContent = 'Status'; bar.appendChild(sLabel);
+
+      // Completed / Planned toggle buttons
+      [['complete', 'Completed', 'status-complete'], ['planned', 'Planned', 'status-planned']].forEach(([val, label, colorClass]) => {
+        const btn = document.createElement('button');
+        btn.className = `yr-btn status-btn active ${colorClass}`;
+        btn.textContent = label;
+        btn.dataset.status = val;
+        bar.appendChild(btn);
+      });
+
       bar.addEventListener('click', e => {
         const btn = e.target.closest('.yr-btn');
         if (!btn) return;
-        bar.querySelectorAll('.yr-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        activeYear = btn.dataset.year;
+
+        if (btn.dataset.status) {
+          // Status toggle
+          btn.classList.toggle('active');
+          if (btn.dataset.status === 'complete') showComplete = btn.classList.contains('active');
+          else                                    showPlanned  = btn.classList.contains('active');
+        } else {
+          // Year filter (exclusive)
+          bar.querySelectorAll('.yr-btn:not(.status-btn)').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeYear = btn.dataset.year;
+        }
         applyFilters();
       });
     }
@@ -713,7 +746,8 @@
             );
             const streetName = streetKey ? (f.properties[streetKey] || null) : null;
             if (year != null) years.add(year);
-            allLayers.push({ layer, year, patchNum, streetName });
+            const status = (f.properties.Status ?? '').toLowerCase();
+            allLayers.push({ layer, year, patchNum, streetName, status });
 
             // Patch number label — visible only at high zoom via CSS
             if (patchNum != null) {
