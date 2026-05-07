@@ -95,10 +95,8 @@
       padding: 8px 10px; font-size: 11px; color: #aaa;
       z-index: 1000; line-height: 1.9; border: 1px solid rgba(255,255,255,0.06);
     }
-    .leg-dot {
-      display: inline-block; width: 10px; height: 10px; border-radius: 50%;
-      margin-right: 5px; vertical-align: middle; border: 1.5px solid rgba(255,255,255,0.2);
-    }
+    .leg-dot { display: inline-block; vertical-align: middle; margin-right: 5px; }
+    .pentagon-marker { background: none !important; border: none !important; }
 
     /* ── Year bar ── */
     #year-bar {
@@ -206,24 +204,23 @@
     /* ── Patch number labels (shown at zoom >= 17) ── */
     .leaflet-tooltip.patch-label {
       background: transparent; border: none; box-shadow: none;
-      font-size: 10px; font-weight: 800; padding: 0 2px;
+      font-size: 12px; font-weight: 800; padding: 0 2px;
       white-space: nowrap; pointer-events: none !important;
       letter-spacing: 0.02em;
     }
     .leaflet-tooltip.patch-label::before { display: none; }
     .leaflet-tooltip.patch-label.lbl-complete {
       color: #1e8a40;
-      text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff;
+      text-shadow: 0 0 4px #fff, 0 0 4px #fff, 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
     }
     .leaflet-tooltip.patch-label.lbl-planned {
       color: #1a5fa8;
-      text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff;
+      text-shadow: 0 0 4px #fff, 0 0 4px #fff, 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
     }
     .leaflet-tooltip.patch-label.lbl-other {
       color: #555;
-      text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+      text-shadow: 0 0 4px #fff, 0 0 4px #fff, 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
     }
-    /* Hidden until zoom threshold */
     #map:not(.show-labels) .leaflet-tooltip.patch-label { display: none !important; }
 
     /* ── Lightbox ── */
@@ -275,9 +272,9 @@
       <div id="badge"></div>
       <div id="no-results">No patches match</div>
       <div id="legend">
-        <div><span class="leg-dot" style="background:#2e9e4f"></span>Complete</div>
-        <div><span class="leg-dot" style="background:#2970c4"></span>Planned</div>
-        <div><span class="leg-dot" style="background:#888"></span>Other</div>
+        <div><span class="leg-dot"><?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#2e9e4f" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></span>Complete</div>
+        <div><span class="leg-dot"><?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#2970c4" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></span>Planned</div>
+        <div><span class="leg-dot"><?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#888" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></span>Other</div>
       </div>
     </div>
 
@@ -445,15 +442,14 @@
           || String(streetName ?? '').toLowerCase().includes(sq)
           || String(year ?? '').includes(sq);
         const show = matchYear && matchSearch;
+        const el = layer.getElement();
         const tt = layer.getTooltip()?.getElement();
         if (show) {
-          layer.setStyle({ opacity: 1, fillOpacity: 0.88 });
-          if (layer.getElement()) layer.getElement().style.pointerEvents = '';
+          if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
           if (tt) tt.style.visibility = '';
           visible++;
         } else {
-          layer.setStyle({ opacity: 0, fillOpacity: 0 });
-          if (layer.getElement()) layer.getElement().style.pointerEvents = 'none';
+          if (el) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; }
           if (tt) tt.style.visibility = 'hidden';
           if (layer.isPopupOpen()) map.closePopup();
         }
@@ -701,8 +697,11 @@
           pointToLayer: (f, ll) => {
             latlngs.push(ll);
             const s = (f.properties.Status ?? '').toLowerCase();
-            const fillColor = s === 'complete' ? '#2e9e4f' : s === 'planned' ? '#2970c4' : '#888';
-            return L.circleMarker(ll, { radius: 9, fillColor, color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.88 });
+            const fill = s === 'complete' ? '#2e9e4f' : s === 'planned' ? '#2970c4' : '#888';
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="${fill}" stroke="white" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+            return L.marker(ll, {
+              icon: L.divIcon({ html: svg, className: 'pentagon-marker', iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13], tooltipAnchor: [0, -13] })
+            });
           },
           onEachFeature: (f, layer) => {
             const oid        = f.properties.OBJECTID ?? f.properties.objectid;
@@ -744,7 +743,7 @@
         document.getElementById('loading').style.display = 'none';
 
         // Patch number labels appear at zoom 17+ (≈4 clicks in from default city view)
-        const LABEL_ZOOM = 17;
+        const LABEL_ZOOM = 16;
         function updateLabels() {
           document.getElementById('map').classList.toggle('show-labels', map.getZoom() >= LABEL_ZOOM);
         }
