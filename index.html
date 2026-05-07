@@ -372,6 +372,14 @@
         const img = document.createElement('img');
         img.src = src; img.alt = 'Patch photo';
         img.addEventListener('click', () => openLightbox(src));
+        img.addEventListener('load', () => {
+          const popupEl = slot.closest('.leaflet-popup');
+          if (!popupEl) return;
+          const rect    = popupEl.getBoundingClientRect();
+          const mapRect = map.getContainer().getBoundingClientRect();
+          const slack   = rect.top - mapRect.top - 16;
+          if (slack < 0) map.panBy([0, slack], { animate: true });
+        });
         slot.innerHTML = ''; slot.appendChild(img);
       } catch {
         slot.innerHTML = `<div class="popup-photo-placeholder">Photo unavailable</div>`;
@@ -437,8 +445,6 @@
     let allLayers    = [];
     let activeYear   = 'all';
     let searchQuery  = '';
-    let showComplete = true;
-    let showPlanned  = true;
     let clusterGroup;
 
     function applyFilters() {
@@ -452,10 +458,7 @@
           || String(patchNum ?? '').toLowerCase().includes(sq)
           || String(streetName ?? '').toLowerCase().includes(sq)
           || String(year ?? '').includes(sq);
-        const matchStatus = (status === 'complete' && showComplete)
-                         || (status === 'planned'  && showPlanned)
-                         || (status !== 'complete' && status !== 'planned');
-        const show = matchYear && matchSearch && matchStatus;
+        const show = matchYear && matchSearch;
         const inMap = clusterGroup.hasLayer(layer);
 
         if (show && !inMap) toAdd.push(layer);
@@ -472,9 +475,8 @@
 
       const visCount = allLayers.filter(({ layer }) => clusterGroup.hasLayer(layer)).length;
       showBadge(`${visCount} patch${visCount !== 1 ? 'es' : ''} shown`);
-      const anyFilter = activeYear !== 'all' || sq || !showComplete || !showPlanned;
       document.getElementById('no-results').style.display =
-        (visCount === 0 && anyFilter) ? 'block' : 'none';
+        (visCount === 0 && (activeYear !== 'all' || sq)) ? 'block' : 'none';
     }
 
     function zoomToVisible(thenOpenIfSingle) {
@@ -484,9 +486,9 @@
 
       if (visible.length === 1) {
         const ll = visible[0].layer.getLatLng();
-        // Offset center northward so marker sits in lower portion — leaves room for popup+photo above
+        // Shift center north so marker sits ~70% down — full popup + 190px photo fits above
         const H = map.getContainer().clientHeight;
-        const offsetPx = Math.max(100, H * 0.18);
+        const offsetPx = Math.max(130, H * 0.28);
         const shifted = map.unproject(map.project(ll, 17).subtract([0, offsetPx]), 17);
         map.setView(shifted, 17, { animate: true });
         if (thenOpenIfSingle) {
@@ -597,34 +599,12 @@
         bar.appendChild(btn);
       });
 
-      // Divider + Status label
-      const divider = document.createElement('span'); divider.className = 'bar-divider'; bar.appendChild(divider);
-      const sLabel  = document.createElement('span');  sLabel.className = 'bar-label'; sLabel.textContent = 'Status'; bar.appendChild(sLabel);
-
-      // Completed / Planned toggle buttons
-      [['complete', 'Completed', 'status-complete'], ['planned', 'Planned', 'status-planned']].forEach(([val, label, colorClass]) => {
-        const btn = document.createElement('button');
-        btn.className = `yr-btn status-btn active ${colorClass}`;
-        btn.textContent = label;
-        btn.dataset.status = val;
-        bar.appendChild(btn);
-      });
-
       bar.addEventListener('click', e => {
         const btn = e.target.closest('.yr-btn');
         if (!btn) return;
-
-        if (btn.dataset.status) {
-          // Status toggle
-          btn.classList.toggle('active');
-          if (btn.dataset.status === 'complete') showComplete = btn.classList.contains('active');
-          else                                    showPlanned  = btn.classList.contains('active');
-        } else {
-          // Year filter (exclusive)
-          bar.querySelectorAll('.yr-btn:not(.status-btn)').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          activeYear = btn.dataset.year;
-        }
+        bar.querySelectorAll('.yr-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeYear = btn.dataset.year;
         applyFilters();
       });
     }
