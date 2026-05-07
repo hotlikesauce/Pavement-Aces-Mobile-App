@@ -96,7 +96,6 @@
       z-index: 1000; line-height: 1.9; border: 1px solid rgba(255,255,255,0.06);
     }
     .leg-dot { display: inline-block; vertical-align: middle; margin-right: 5px; }
-    .pentagon-marker { background: none !important; border: none !important; }
 
     /* ── Year bar ── */
     #year-bar {
@@ -295,9 +294,9 @@
       <div id="badge"></div>
       <div id="no-results">No patches match</div>
       <div id="legend">
-        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#00ff04" fill-opacity="0.8" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg></span>Complete</div>
-        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#1fbcff" fill-opacity="0.8" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg></span>Planned</div>
-        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#888" fill-opacity="0.8" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg></span>Other</div>
+        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="#00ff04" fill-opacity="0.8" stroke="#222" stroke-width="1.5"/></svg></span>Complete</div>
+        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="#1fbcff" fill-opacity="0.8" stroke="#222" stroke-width="1.5"/></svg></span>Planned</div>
+        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><circle cx="7" cy="7" r="5.5" fill="#888" fill-opacity="0.8" stroke="#222" stroke-width="1.5"/></svg></span>Other</div>
       </div>
     </div>
 
@@ -324,6 +323,7 @@
 
     // ─── MAP ───────────────────────────────────────────────────────────────────
     const map = L.map('map', { center: [38.690, -121.285], zoom: 13 });
+    const canvasRenderer = L.canvas({ padding: 0.5 });
     const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
     const hybrid = L.layerGroup([
@@ -506,42 +506,51 @@
     }
 
     // ─── FILTER + ZOOM ─────────────────────────────────────────────────────────
-    let allLayers   = [];
-    let activeYear  = 'all';
-    let searchQuery = '';
+    let allLayers    = [];
+    let filterPassing = new Set();
+    let activeYear   = 'all';
+    let searchQuery  = '';
 
     function applyFilters() {
       const sq = searchQuery.toLowerCase();
-      let visible = 0;
+      filterPassing.clear();
       for (const { layer, year, patchNum, streetName } of allLayers) {
         const matchYear   = activeYear === 'all' || String(year) === activeYear;
         const matchSearch = !sq
           || String(patchNum ?? '').toLowerCase().includes(sq)
           || String(streetName ?? '').toLowerCase().includes(sq)
           || String(year ?? '').includes(sq);
-        const show = matchYear && matchSearch;
-        const el = layer.getElement();
-        const tt = layer.getTooltip()?.getElement();
+        if (matchYear && matchSearch) filterPassing.add(layer);
+      }
+      updateViewport();
+      const anyFilter = activeYear !== 'all' || sq;
+      if (anyFilter) showBadge(`${filterPassing.size} patch${filterPassing.size !== 1 ? 'es' : ''} shown`);
+      else { const b = document.getElementById('badge'); b.style.display = 'none'; }
+      document.getElementById('no-results').style.display =
+        (filterPassing.size === 0 && anyFilter) ? 'block' : 'none';
+    }
+
+    function updateViewport() {
+      if (!allLayers.length) return;
+      const bounds = map.getBounds().pad(0.35);
+      for (const { layer } of allLayers) {
+        const show = filterPassing.has(layer) && bounds.contains(layer.getLatLng());
+        const tt   = layer.getTooltip()?.getElement();
         if (show) {
-          if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
+          if (!map.hasLayer(layer)) map.addLayer(layer);
           if (tt) tt.style.visibility = '';
-          visible++;
         } else {
-          if (el) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; }
+          if (map.hasLayer(layer)) {
+            if (layer.isPopupOpen()) map.closePopup();
+            map.removeLayer(layer);
+          }
           if (tt) tt.style.visibility = 'hidden';
-          if (layer.isPopupOpen()) map.closePopup();
         }
       }
-      showBadge(`${visible} patch${visible !== 1 ? 'es' : ''} shown`);
-      document.getElementById('no-results').style.display =
-        (visible === 0 && (activeYear !== 'all' || sq)) ? 'block' : 'none';
     }
 
     function zoomToVisible(thenOpenIfSingle) {
-      const visible = allLayers.filter(({ layer }) => {
-        const el = layer.getElement();
-        return !el || el.style.pointerEvents !== 'none';
-      });
+      const visible = allLayers.filter(({ layer }) => filterPassing.has(layer));
       if (!visible.length) return;
 
       if (visible.length === 1) {
@@ -805,9 +814,10 @@
             latlngs.push(ll);
             const s = (f.properties.Status ?? '').toLowerCase();
             const fill = s === 'complete' ? '#00ff04' : s === 'planned' ? '#1fbcff' : '#888';
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="${fill}" fill-opacity="0.8" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
-            return L.marker(ll, {
-              icon: L.divIcon({ html: svg, className: 'pentagon-marker', iconSize: [20, 20], iconAnchor: [10, 10], popupAnchor: [0, -12], tooltipAnchor: [0, -12] })
+            return L.circleMarker(ll, {
+              renderer: canvasRenderer,
+              radius: 9, fillColor: fill, fillOpacity: 0.8,
+              color: '#222', weight: 1.5, opacity: 1,
             });
           },
           onEachFeature: (f, layer) => {
@@ -828,12 +838,12 @@
               const s = (f.properties.Status ?? '').toLowerCase();
               const lblClass = s === 'complete' ? 'lbl-complete' : s === 'planned' ? 'lbl-planned' : 'lbl-other';
               layer.bindTooltip(String(patchNum), {
-                permanent: true, direction: 'top', offset: [0, -9],
+                permanent: true, direction: 'top', offset: [0, -11],
                 className: `patch-label ${lblClass}`,
               });
             }
 
-            layer.bindPopup(popupHtml(f.properties), { maxWidth: 300, minWidth: 285 });
+            layer.bindPopup(popupHtml(f.properties), { maxWidth: 300, minWidth: 285, offset: [0, -9] });
             layer.on('popupopen', () => {
               const slot = layer.getPopup().getElement()?.querySelector('.photo-slot');
               if (slot && !slot.dataset.loaded) {
@@ -842,19 +852,22 @@
               }
             });
           },
-        }).addTo(map);
+        }); // no .addTo(map) — viewport culling adds layers individually
 
+        // Seed filter state and do initial viewport cull
+        filterPassing = new Set(allLayers.map(l => l.layer));
         if (latlngs.length) map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16 });
         buildYearBar([...years]);
         buildSuggestionData();
         document.getElementById('loading').style.display = 'none';
 
-        // Patch number labels appear at zoom 17+ (≈4 clicks in from default city view)
         const LABEL_ZOOM = 16;
         function updateLabels() {
           document.getElementById('map').classList.toggle('show-labels', map.getZoom() >= LABEL_ZOOM);
         }
+        map.on('moveend zoomend', updateViewport);
         map.on('zoomend', updateLabels);
+        updateViewport();
         updateLabels();
 
       } catch (err) {
