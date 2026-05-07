@@ -9,6 +9,9 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -114,8 +117,8 @@
       transition: all 0.15s; -webkit-tap-highlight-color: transparent;
     }
     .yr-btn.active { background: #c0392b; border-color: #c0392b; color: #fff; }
-    .yr-btn.status-btn.active.status-complete { background: #2e9e4f; border-color: #2e9e4f; color: #fff; }
-    .yr-btn.status-btn.active.status-planned  { background: #2970c4; border-color: #2970c4; color: #fff; }
+    .yr-btn.status-btn.active.status-complete { background: #00ff04; border-color: #00ff04; color: #111; }
+    .yr-btn.status-btn.active.status-planned  { background: #1fbcff; border-color: #1fbcff; color: #111; }
     .bar-divider { width: 1px; height: 18px; background: #2e2e2e; flex-shrink: 0; align-self: center; margin: 0 2px; }
 
     /* ── Loading ── */
@@ -162,8 +165,8 @@
       font-size: 10px; font-weight: 700; padding: 2px 8px;
       border-radius: 10px; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;
     }
-    .status-badge.complete { background: rgba(46,158,79,0.2); color: #4cd87a; border: 1px solid rgba(46,158,79,0.4); }
-    .status-badge.planned  { background: rgba(41,112,196,0.2); color: #5ba8ff; border: 1px solid rgba(41,112,196,0.4); }
+    .status-badge.complete { background: rgba(0,255,4,0.15); color: #00dd03; border: 1px solid rgba(0,255,4,0.35); }
+    .status-badge.planned  { background: rgba(31,188,255,0.15); color: #1fbcff; border: 1px solid rgba(31,188,255,0.35); }
     .status-badge.other    { background: rgba(136,136,136,0.2); color: #aaa; border: 1px solid rgba(136,136,136,0.3); }
     .popup-street { font-size: 12px; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -213,11 +216,11 @@
     }
     .leaflet-tooltip.patch-label::before { display: none; }
     .leaflet-tooltip.patch-label.lbl-complete {
-      color: #1e8a40;
+      color: #009902;
       text-shadow: 0 0 4px #fff, 0 0 4px #fff, 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
     }
     .leaflet-tooltip.patch-label.lbl-planned {
-      color: #1a5fa8;
+      color: #0090c0;
       text-shadow: 0 0 4px #fff, 0 0 4px #fff, 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
     }
     .leaflet-tooltip.patch-label.lbl-other {
@@ -275,9 +278,9 @@
       <div id="badge"></div>
       <div id="no-results">No patches match</div>
       <div id="legend">
-        <div><span class="leg-dot"><?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#2e9e4f" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></span>Complete</div>
-        <div><span class="leg-dot"><?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#2970c4" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></span>Planned</div>
-        <div><span class="leg-dot"><?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#888" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></span>Other</div>
+        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#00ff04" fill-opacity="0.8" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg></span>Complete</div>
+        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#1fbcff" fill-opacity="0.8" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg></span>Planned</div>
+        <div><span class="leg-dot"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="#888" fill-opacity="0.8" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg></span>Other</div>
       </div>
     </div>
 
@@ -436,10 +439,13 @@
     let searchQuery  = '';
     let showComplete = true;
     let showPlanned  = true;
+    let clusterGroup;
 
     function applyFilters() {
+      if (!clusterGroup) return;
       const sq = searchQuery.toLowerCase();
-      let visible = 0;
+      const toAdd = [], toRemove = [];
+
       for (const { layer, year, patchNum, streetName, status } of allLayers) {
         const matchYear   = activeYear === 'all' || String(year) === activeYear;
         const matchSearch = !sq
@@ -450,34 +456,41 @@
                          || (status === 'planned'  && showPlanned)
                          || (status !== 'complete' && status !== 'planned');
         const show = matchYear && matchSearch && matchStatus;
-        const el = layer.getElement();
-        const tt = layer.getTooltip()?.getElement();
-        if (show) {
-          if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
-          if (tt) tt.style.visibility = '';
-          visible++;
-        } else {
-          if (el) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; }
-          if (tt) tt.style.visibility = 'hidden';
+        const inMap = clusterGroup.hasLayer(layer);
+
+        if (show && !inMap) toAdd.push(layer);
+        else if (!show && inMap) {
+          toRemove.push(layer);
           if (layer.isPopupOpen()) map.closePopup();
         }
+        const tt = layer.getTooltip()?.getElement();
+        if (tt) tt.style.visibility = show ? '' : 'hidden';
       }
-      showBadge(`${visible} patch${visible !== 1 ? 'es' : ''} shown`);
+
+      if (toRemove.length) clusterGroup.removeLayers(toRemove);
+      if (toAdd.length)    clusterGroup.addLayers(toAdd);
+
+      const visCount = allLayers.filter(({ layer }) => clusterGroup.hasLayer(layer)).length;
+      showBadge(`${visCount} patch${visCount !== 1 ? 'es' : ''} shown`);
+      const anyFilter = activeYear !== 'all' || sq || !showComplete || !showPlanned;
       document.getElementById('no-results').style.display =
-        (visible === 0 && (activeYear !== 'all' || sq)) ? 'block' : 'none';
+        (visCount === 0 && anyFilter) ? 'block' : 'none';
     }
 
     function zoomToVisible(thenOpenIfSingle) {
-      const visible = allLayers.filter(({ layer }) => {
-        const el = layer.getElement();
-        return !el || el.style.pointerEvents !== 'none';
-      });
+      if (!clusterGroup) return;
+      const visible = allLayers.filter(({ layer }) => clusterGroup.hasLayer(layer));
       if (!visible.length) return;
 
       if (visible.length === 1) {
-        map.setView(visible[0].layer.getLatLng(), 17, { animate: true });
+        const ll = visible[0].layer.getLatLng();
+        // Offset center northward so marker sits in lower portion — leaves room for popup+photo above
+        const H = map.getContainer().clientHeight;
+        const offsetPx = Math.max(100, H * 0.18);
+        const shifted = map.unproject(map.project(ll, 17).subtract([0, offsetPx]), 17);
+        map.setView(shifted, 17, { animate: true });
         if (thenOpenIfSingle) {
-          setTimeout(() => visible[0].layer.openPopup(), 350);
+          setTimeout(() => visible[0].layer.openPopup(), 420);
         }
       } else {
         map.fitBounds(L.latLngBounds(visible.map(v => v.layer.getLatLng())),
@@ -726,14 +739,29 @@
         const years = new Set();
         const latlngs = [];
 
+        clusterGroup = L.markerClusterGroup({
+          chunkedLoading: true,
+          maxClusterRadius: 50,
+          showCoverageOnHover: false,
+          disableClusteringAtZoom: 16,
+          iconCreateFunction: cluster => {
+            const n = cluster.getChildCount();
+            const s = n < 10 ? 36 : n < 100 ? 40 : 44;
+            return L.divIcon({
+              html: `<div style="width:${s}px;height:${s}px;border-radius:50%;background:rgba(192,57,43,0.88);border:2px solid rgba(255,255,255,0.22);display:flex;align-items:center;justify-content:center;color:#fff;font:700 ${n<100?12:10}px system-ui,sans-serif">${n}</div>`,
+              className: '', iconSize: [s, s], iconAnchor: [s/2, s/2],
+            });
+          },
+        }).addTo(map);
+
         L.geoJSON(geojson, {
           pointToLayer: (f, ll) => {
             latlngs.push(ll);
             const s = (f.properties.Status ?? '').toLowerCase();
-            const fill = s === 'complete' ? '#2e9e4f' : s === 'planned' ? '#2970c4' : '#888';
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="${fill}" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
+            const fill = s === 'complete' ? '#00ff04' : s === 'planned' ? '#1fbcff' : '#888';
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="${fill}" fill-opacity="0.8" stroke="#222" stroke-width="1.2" stroke-linejoin="round"/></svg>`;
             return L.marker(ll, {
-              icon: L.divIcon({ html: svg, className: 'pentagon-marker', iconSize: [22, 22], iconAnchor: [11, 11], popupAnchor: [0, -13], tooltipAnchor: [0, -13] })
+              icon: L.divIcon({ html: svg, className: 'pentagon-marker', iconSize: [20, 20], iconAnchor: [10, 10], popupAnchor: [0, -12], tooltipAnchor: [0, -12] })
             });
           },
           onEachFeature: (f, layer) => {
@@ -768,7 +796,7 @@
               }
             });
           },
-        }).addTo(map);
+        }).addTo(clusterGroup);
 
         if (latlngs.length) map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16 });
         buildYearBar([...years]);
