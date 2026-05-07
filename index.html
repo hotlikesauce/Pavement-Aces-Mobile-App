@@ -9,9 +9,6 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -99,8 +96,7 @@
       z-index: 1000; line-height: 1.9; border: 1px solid rgba(255,255,255,0.06);
     }
     .leg-dot { display: inline-block; vertical-align: middle; margin-right: 5px; }
-    .pentagon-marker  { background: none !important; border: none !important; }
-    .pentagon-cluster { background: none !important; border: none !important; }
+    .pentagon-marker { background: none !important; border: none !important; }
 
     /* ── Year bar ── */
     #year-bar {
@@ -510,47 +506,42 @@
     }
 
     // ─── FILTER + ZOOM ─────────────────────────────────────────────────────────
-    let allLayers    = [];
-    let activeYear   = 'all';
-    let searchQuery  = '';
-    let clusterGroup;
-    const layerStatus = new Map();
+    let allLayers   = [];
+    let activeYear  = 'all';
+    let searchQuery = '';
 
     function applyFilters() {
-      if (!clusterGroup) return;
       const sq = searchQuery.toLowerCase();
-      const toAdd = [], toRemove = [];
-
-      for (const { layer, year, patchNum, streetName, status } of allLayers) {
+      let visible = 0;
+      for (const { layer, year, patchNum, streetName } of allLayers) {
         const matchYear   = activeYear === 'all' || String(year) === activeYear;
         const matchSearch = !sq
           || String(patchNum ?? '').toLowerCase().includes(sq)
           || String(streetName ?? '').toLowerCase().includes(sq)
           || String(year ?? '').includes(sq);
         const show = matchYear && matchSearch;
-        const inMap = clusterGroup.hasLayer(layer);
-
-        if (show && !inMap) toAdd.push(layer);
-        else if (!show && inMap) {
-          toRemove.push(layer);
+        const el = layer.getElement();
+        const tt = layer.getTooltip()?.getElement();
+        if (show) {
+          if (el) { el.style.opacity = ''; el.style.pointerEvents = ''; }
+          if (tt) tt.style.visibility = '';
+          visible++;
+        } else {
+          if (el) { el.style.opacity = '0'; el.style.pointerEvents = 'none'; }
+          if (tt) tt.style.visibility = 'hidden';
           if (layer.isPopupOpen()) map.closePopup();
         }
-        const tt = layer.getTooltip()?.getElement();
-        if (tt) tt.style.visibility = show ? '' : 'hidden';
       }
-
-      if (toRemove.length) clusterGroup.removeLayers(toRemove);
-      if (toAdd.length)    clusterGroup.addLayers(toAdd);
-
-      const visCount = allLayers.filter(({ layer }) => clusterGroup.hasLayer(layer)).length;
-      showBadge(`${visCount} patch${visCount !== 1 ? 'es' : ''} shown`);
+      showBadge(`${visible} patch${visible !== 1 ? 'es' : ''} shown`);
       document.getElementById('no-results').style.display =
-        (visCount === 0 && (activeYear !== 'all' || sq)) ? 'block' : 'none';
+        (visible === 0 && (activeYear !== 'all' || sq)) ? 'block' : 'none';
     }
 
     function zoomToVisible(thenOpenIfSingle) {
-      if (!clusterGroup) return;
-      const visible = allLayers.filter(({ layer }) => clusterGroup.hasLayer(layer));
+      const visible = allLayers.filter(({ layer }) => {
+        const el = layer.getElement();
+        return !el || el.style.pointerEvents !== 'none';
+      });
       if (!visible.length) return;
 
       if (visible.length === 1) {
@@ -788,28 +779,6 @@
         const years = new Set();
         const latlngs = [];
 
-        clusterGroup = L.markerClusterGroup({
-          chunkedLoading: true,
-          maxClusterRadius: 50,
-          showCoverageOnHover: false,
-          disableClusteringAtZoom: 16,
-          iconCreateFunction: cluster => {
-            const markers = cluster.getAllChildMarkers();
-            let nC = 0, nP = 0;
-            markers.forEach(m => {
-              const s = layerStatus.get(m) || '';
-              if (s === 'complete') nC++;
-              else if (s === 'planned') nP++;
-            });
-            const fill = nP > nC ? '#1fbcff' : nC > 0 ? '#00ff04' : '#aaa';
-            const n  = cluster.getChildCount();
-            const sz = n < 10 ? 36 : n < 100 ? 42 : 48;
-            const fs = n < 10 ? 7   : n < 100 ? 5.5 : 4.5;
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 24 24"><polygon points="12,3 20.6,9.2 17.3,19.3 6.7,19.3 3.4,9.2" fill="${fill}" fill-opacity="0.88" stroke="#222" stroke-width="1" stroke-linejoin="round"/><text x="12" y="13" text-anchor="middle" dominant-baseline="middle" fill="#111" font-size="${fs}" font-weight="bold" font-family="system-ui,sans-serif">${n}</text></svg>`;
-            return L.divIcon({ html: svg, className: 'pentagon-cluster', iconSize: [sz, sz], iconAnchor: [sz/2, sz/2] });
-          },
-        }).addTo(map);
-
         L.geoJSON(geojson, {
           pointToLayer: (f, ll) => {
             latlngs.push(ll);
@@ -832,7 +801,6 @@
             if (year != null) years.add(year);
             const status = (f.properties.Status ?? '').toLowerCase();
             allLayers.push({ layer, year, patchNum, streetName, status });
-            layerStatus.set(layer, status);
 
             // Patch number label — visible only at high zoom via CSS
             if (patchNum != null) {
@@ -853,7 +821,7 @@
               }
             });
           },
-        }).addTo(clusterGroup);
+        }).addTo(map);
 
         if (latlngs.length) map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 16 });
         buildYearBar([...years]);
